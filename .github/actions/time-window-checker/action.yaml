@@ -24,20 +24,34 @@ runs:
         DAY=$(date -u +"%u")
         IS_SENSITIVE=false
 
-        # Logic: Block if current hour is >= 12 OR < 08 (Daily)
+        echo "DEBUG: Hour is $HOUR, Day is $DAY"
+
         if [ "$HOUR" -ge "${{ inputs.start_hour_utc }}" ] || [ "$HOUR" -lt "${{ inputs.end_hour_utc }}" ]; then
           IS_SENSITIVE=true
+          echo "DEBUG: Time trigger activated"
         fi
 
-        # ADDITIONALLY: Keep the weekend block if desired
         if [ "$DAY" -eq 6 ] || [ "$DAY" -eq 7 ]; then
           IS_SENSITIVE=true
+          echo "DEBUG: Weekend trigger activated"
         fi
-        # Check for label in the PR metadata
-        HAS_LABEL=$(echo '${{ toJson(github.event.pull_request.labels.*.name) }}' | jq -r --arg LABEL "${{ inputs.bypass_label }}" 'contains([$LABEL])')
+
+        # Extract labels and check specifically for the bypass string
+        RAW_LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
+        echo "DEBUG: Labels found: $RAW_LABELS"
+
+        # Check if the bypass label exists in the array
+        if echo "$RAW_LABELS" | jq -e ". | contains([\"${{ inputs.bypass_label }}\"])" > /dev/null; then
+          HAS_LABEL=true
+        else
+          HAS_LABEL=false
+        fi
+
+        echo "DEBUG: IS_SENSITIVE=$IS_SENSITIVE, HAS_LABEL=$HAS_LABEL"
 
         if [ "$IS_SENSITIVE" = "true" ] && [ "$HAS_LABEL" = "false" ]; then
-          echo "::error::SENSITIVE WINDOW DETECTED. Apply the '${{ inputs.bypass_label }}' label to merge."
+          echo "::error title=Deployment Blocked::SENSITIVE WINDOW DETECTED. Apply the '${{ inputs.bypass_label }}' label to merge."
           exit 1
         fi
-        echo "Validation passed."
+
+        echo "Success: No restrictions active or bypass applied."
