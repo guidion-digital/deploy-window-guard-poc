@@ -1,0 +1,39 @@
+name: "Time Window Validator"
+description: "Blocks PRs during sensitive times unless a bypass label is present"
+inputs:
+  bypass_label:
+    description: "The label used to bypass the time restriction"
+    required: false
+    default: "bypass-time-warnings"
+  start_hour_utc:
+    description: "Hour to start the block (UTC, 0-23)"
+    required: false
+    default: "16"
+  end_hour_utc:
+    description: "Hour to end the block (UTC, 0-23)"
+    required: false
+    default: "08"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check Time and Label
+      shell: bash
+      run: |
+        HOUR=$(date -u +"%H")
+        DAY=$(date -u +"%u")
+        IS_SENSITIVE=false
+
+        # Logic: Block Friday after Start Hour, all Saturday/Sunday, Monday before End Hour
+        if [ "$DAY" -eq 5 ] && [ "$HOUR" -ge "${{ inputs.start_hour_utc }}" ]; then IS_SENSITIVE=true; fi
+        if [ "$DAY" -eq 6 ] || [ "$DAY" -eq 7 ]; then IS_SENSITIVE=true; fi
+        if [ "$DAY" -eq 1 ] && [ "$HOUR" -lt "${{ inputs.end_hour_utc }}" ]; then IS_SENSITIVE=true; fi
+
+        # Check for label in the PR metadata
+        HAS_LABEL=$(echo '${{ toJson(github.event.pull_request.labels.*.name) }}' | jq -r --arg LABEL "${{ inputs.bypass_label }}" 'contains([$LABEL])')
+
+        if [ "$IS_SENSITIVE" = "true" ] && [ "$HAS_LABEL" = "false" ]; then
+          echo "::error::SENSITIVE WINDOW DETECTED. Apply the '${{ inputs.bypass_label }}' label to merge."
+          exit 1
+        fi
+        echo "Validation passed."
