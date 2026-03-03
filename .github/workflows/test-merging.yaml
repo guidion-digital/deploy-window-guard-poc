@@ -15,4 +15,4 @@ jobs:
         uses: ./.github/actions/time-window-checker
         with:
           bypass_label: "bypass-time-warnings"
-          start_hour_utc: "12"
+          start_hour_utc: "10"
