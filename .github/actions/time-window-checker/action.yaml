@@ -24,11 +24,15 @@ runs:
         DAY=$(date -u +"%u")
         IS_SENSITIVE=false
 
-        # Logic: Block Friday after Start Hour, all Saturday/Sunday, Monday before End Hour
-        if [ "$DAY" -eq 5 ] && [ "$HOUR" -ge "${{ inputs.start_hour_utc }}" ]; then IS_SENSITIVE=true; fi
-        if [ "$DAY" -eq 6 ] || [ "$DAY" -eq 7 ]; then IS_SENSITIVE=true; fi
-        if [ "$DAY" -eq 1 ] && [ "$HOUR" -lt "${{ inputs.end_hour_utc }}" ]; then IS_SENSITIVE=true; fi
+        # Logic: Block if current hour is >= 12 OR < 08 (Daily)
+        if [ "$HOUR" -ge "${{ inputs.start_hour_utc }}" ] || [ "$HOUR" -lt "${{ inputs.end_hour_utc }}" ]; then
+          IS_SENSITIVE=true
+        fi
 
+        # ADDITIONALLY: Keep the weekend block if desired
+        if [ "$DAY" -eq 6 ] || [ "$DAY" -eq 7 ]; then
+          IS_SENSITIVE=true
+        fi
         # Check for label in the PR metadata
         HAS_LABEL=$(echo '${{ toJson(github.event.pull_request.labels.*.name) }}' | jq -r --arg LABEL "${{ inputs.bypass_label }}" 'contains([$LABEL])')
 
