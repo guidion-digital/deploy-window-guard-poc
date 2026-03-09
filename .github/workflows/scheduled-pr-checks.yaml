@@ -22,5 +22,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           for pr in $(gh pr list --state open --json number -q '.[].number'); do
-            gh pr comment "$pr" --body "<!-- recheck-deploy-window -->"
+            gh pr comment "$pr" --body "[recheck-deploy-window]"
           done
