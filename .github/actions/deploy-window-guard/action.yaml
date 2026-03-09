@@ -51,15 +51,24 @@ runs:
 
         if [ "$IS_SENSITIVE" = "true" ] && [ "$HAS_LABEL" = "false" ]; then
           echo "::error title=Deployment Blocked::SENSITIVE WINDOW DETECTED. Apply the '${{ inputs.bypass_label }}' label to merge."
-          exit 1
+          echo "blocked" > "$RUNNER_TEMP/deploy-guard-blocked"
+        else
+          echo "Success: No restrictions active or bypass applied."
         fi
 
-        echo "Success: No restrictions active or bypass applied."
-    # After the "Check Time and Label" step, add a step that runs on failure:
     - name: Comment on PR
-      if: failure()
+      if: always()
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        gh pr comment ${{ github.event.pull_request.number }} --body "**Deployment blocked** – Sensitive window detected. Apply the \`${{ inputs.bypass_label }}\` label to merge."
+        if [ -f "$RUNNER_TEMP/deploy-guard-blocked" ]; then
+          gh pr comment ${{ github.event.pull_request.number }} --body "**Deployment blocked** – Sensitive window detected. Apply the \`${{ inputs.bypass_label }}\` label to merge."
+        fi
+
+    - name: Fail if blocked
+      shell: bash
+      run: |
+        if [ -f "$RUNNER_TEMP/deploy-guard-blocked" ]; then
+          exit 1
+        fi
