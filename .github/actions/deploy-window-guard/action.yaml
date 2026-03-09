@@ -13,13 +13,31 @@ inputs:
     description: "Hour to end the block (UTC, 0-23)"
     required: false
     default: "08"
+  pr_number:
+    description: "PR number (set when triggered by issue_comment)"
+    required: false
+    default: ""
+  labels_json:
+    description: "JSON array of label names (set when triggered by issue_comment)"
+    required: false
+    default: ""
 
 runs:
   using: "composite"
   steps:
     - name: Check Time and Label
       shell: bash
+      env:
+        PR_NUMBER: ${{ inputs.pr_number }}
+        LABELS_JSON: ${{ inputs.labels_json }}
       run: |
+        if [ -n "$PR_NUMBER" ] && [ -n "$LABELS_JSON" ]; then
+          RAW_LABELS="$LABELS_JSON"
+        else
+          RAW_LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
+        fi
+        echo "DEBUG: Labels found: $RAW_LABELS"
+
         HOUR=$(date -u +"%H")
         DAY=$(date -u +"%u")
         IS_SENSITIVE=false
@@ -36,11 +54,6 @@ runs:
           echo "DEBUG: Weekend trigger activated"
         fi
 
-        # Extract labels and check specifically for the bypass string
-        RAW_LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
-        echo "DEBUG: Labels found: $RAW_LABELS"
-
-        # Check if the bypass label exists in the array
         if echo "$RAW_LABELS" | jq -e ". | contains([\"${{ inputs.bypass_label }}\"])" > /dev/null; then
           HAS_LABEL=true
         else
@@ -64,11 +77,12 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
       run: |
         if [ -f "$RUNNER_TEMP/deploy-guard-blocked" ]; then
-          gh pr comment ${{ github.event.pull_request.number }} --body "**Deployment blocked** – Sensitive window detected. Apply the \`${{ inputs.bypass_label }}\` label to merge."
+          gh pr comment "$PR_NUMBER" --body "**Deployment blocked** – Sensitive window detected. Apply the \`${{ inputs.bypass_label }}\` label to merge."
         elif [ -f "$RUNNER_TEMP/deploy-guard-bypass" ]; then
-          gh pr comment ${{ github.event.pull_request.number }} --body "**Bypass applied** – The \`${{ inputs.bypass_label }}\` label was found. Deployment is allowed during this window."
+          gh pr comment "$PR_NUMBER" --body "**Bypass applied** – The \`${{ inputs.bypass_label }}\` label was found. Deployment is allowed during this window."
         fi
 
     - name: Fail if blocked
