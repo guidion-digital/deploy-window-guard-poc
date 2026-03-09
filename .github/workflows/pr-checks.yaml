@@ -14,11 +14,6 @@ jobs:
       - name: Run Deploy Window Check
         uses: guidion-digital/deploy-window-guard-poc/.github/actions/deploy-window-guard@v1
         with:
-<<<<<<< Updated upstream
-          bypass_label: "bypass-time-warnings"
-          start_hour_utc: "10"
-=======
           bypass_label: "bypass-deploy-window-guard"
           start_hour_utc: "8"
           end_hour_utc: "17"
->>>>>>> Stashed changes
