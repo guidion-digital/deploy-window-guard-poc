@@ -11,6 +11,9 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Run Deploy Window Check
         uses: guidion-digital/deploy-window-guard-poc/.github/actions/deploy-window-guard@master
         with:
