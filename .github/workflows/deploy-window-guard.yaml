@@ -1,0 +1,71 @@
+name: Run Deploy Window Checks
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  get-prs:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '[recheck-deploy-window]'))
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pr_list: ${{ steps.set_pr_list.outputs.pr_list }}
+    steps:
+      - name: Set PR list
+        id: set_pr_list
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            pr_list=$(gh pr list --state open --json number -q '.[].number' | jq -R -s -c 'split("\n") | map(select(length>0)) | map(tonumber)')
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            pr_list="[${{ github.event.pull_request.number }}]"
+          else
+            pr_list="[${{ github.event.issue.number }}]"
+          fi
+          echo "pr_list=$pr_list" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  deploy-window-check:
+    needs: get-prs
+    if: needs.get-prs.result == 'success' && needs.get-prs.outputs.pr_list != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pr_number: ${{ fromJson(needs.get-prs.outputs.pr_list) }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch labels for schedule
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        id: fetch_labels
+        run: |
+          labels=$(gh pr view ${{ matrix.pr_number }} --json labels -q '.labels[].name' | jq -R -s -c 'split("\n") | map(select(length>0))')
+          echo "labels_json=$labels" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run Deploy Window Check
+        uses: guidion-digital/deploy-window-guard-poc/.github/actions/deploy-window-guard@master
+        with:
+          bypass_label: "bypass-deploy-window-guard"
+          start_hour_utc: "8"
+          end_hour_utc: "17"
+          pr_number: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'issue_comment') && matrix.pr_number || '' }}
+          labels_json: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && steps.fetch_labels.outputs.labels_json || (github.event_name == 'issue_comment' && toJson(github.event.issue.labels.*.name)) || '' }}
