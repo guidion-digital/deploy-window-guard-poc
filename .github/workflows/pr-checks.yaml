@@ -1,18 +1,15 @@
-name: Deploy Guard
+name: Run PR Checks
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:
-  check-safety:
+  deploy-window-check:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run Time Window Check
-        uses: ./.github/actions/time-window-checker
+      - name: Run Deploy Window Check
+        uses: guidion-digital/deploy-window-guard-poc/.github/actions/deploy-window-guard@v1
         with:
           bypass_label: "bypass-time-warnings"
           start_hour_utc: "10"

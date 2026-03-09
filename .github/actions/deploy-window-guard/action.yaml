@@ -1,4 +1,4 @@
-name: "Time Window Validator"
+name: "Deploy Window Guard"
 description: "Blocks PRs during sensitive times unless a bypass label is present"
 inputs:
   bypass_label:
