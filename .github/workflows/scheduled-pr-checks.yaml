@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: "0 8 * * *"
     - cron: "0 17 * * *"
+  # TESTING
+  workflow_dispatch:
 
 jobs:
   trigger-pr-checks:
