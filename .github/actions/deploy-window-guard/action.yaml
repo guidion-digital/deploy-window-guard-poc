@@ -52,6 +52,9 @@ runs:
         if [ "$IS_SENSITIVE" = "true" ] && [ "$HAS_LABEL" = "false" ]; then
           echo "::error title=Deployment Blocked::SENSITIVE WINDOW DETECTED. Apply the '${{ inputs.bypass_label }}' label to merge."
           echo "blocked" > "$RUNNER_TEMP/deploy-guard-blocked"
+        elif [ "$IS_SENSITIVE" = "true" ] && [ "$HAS_LABEL" = "true" ]; then
+          echo "bypass" > "$RUNNER_TEMP/deploy-guard-bypass"
+          echo "Success: No restrictions active or bypass applied."
         else
           echo "Success: No restrictions active or bypass applied."
         fi
@@ -64,6 +67,8 @@ runs:
       run: |
         if [ -f "$RUNNER_TEMP/deploy-guard-blocked" ]; then
           gh pr comment ${{ github.event.pull_request.number }} --body "**Deployment blocked** – Sensitive window detected. Apply the \`${{ inputs.bypass_label }}\` label to merge."
+        elif [ -f "$RUNNER_TEMP/deploy-guard-bypass" ]; then
+          gh pr comment ${{ github.event.pull_request.number }} --body "**Bypass applied** – The \`${{ inputs.bypass_label }}\` label was found. Deployment is allowed during this window."
         fi
 
     - name: Fail if blocked

@@ -11,6 +11,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # Needed for the gh CLI to pick up context from
       - name: Checkout repository
         uses: actions/checkout@v4
 
