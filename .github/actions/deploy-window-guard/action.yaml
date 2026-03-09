@@ -4,7 +4,7 @@ inputs:
   bypass_label:
     description: "The label used to bypass the time restriction"
     required: false
-    default: "bypass-time-warnings"
+    default: "bypass-deploy-window-guard"
   start_hour_utc:
     description: "Hour to start the block (UTC, 0-23)"
     required: false
@@ -55,3 +55,11 @@ runs:
         fi
 
         echo "Success: No restrictions active or bypass applied."
+    # After the "Check Time and Label" step, add a step that runs on failure:
+    - name: Comment on PR
+      if: failure()
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh pr comment ${{ github.event.pull_request.number }} --body "**Deployment blocked** – Sensitive window detected. Apply the \`${{ inputs.bypass_label }}\` label to merge."
