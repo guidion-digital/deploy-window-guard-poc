@@ -11,8 +11,11 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Run Deploy Window Check
-        uses: guidion-digital/deploy-window-guard-poc/.github/actions/deploy-window-guard@v1
+        uses: guidion-digital/deploy-window-guard-poc/.github/actions/deploy-window-guard@master
         with:
           bypass_label: "bypass-deploy-window-guard"
           start_hour_utc: "8"
