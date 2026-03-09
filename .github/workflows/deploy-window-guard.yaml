@@ -5,7 +5,7 @@ on:
     - cron: "0 8 * * *"
     - cron: "0 17 * * *"
     # TESTING
-    - cron: "45 13 * * *"
+    - cron: "52 13 * * *"
   workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
