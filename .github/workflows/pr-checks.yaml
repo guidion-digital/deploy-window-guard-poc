@@ -22,5 +22,5 @@ jobs:
         uses: guidion-digital/deploy-window-guard-poc/.github/actions/deploy-window-guard@master
         with:
           bypass_label: "bypass-deploy-window-guard"
-          start_hour_utc: "17"
-          end_hour_utc: "8"
+          start_hour_utc: "8"
+          end_hour_utc: "17"
