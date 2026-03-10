@@ -5,6 +5,10 @@ inputs:
     description: "The label used to bypass the time restriction"
     required: false
     default: "bypass-deploy-window-guard"
+  scheduled:
+    description: "Whether this run was triggered by a schedule"
+    required: false
+    default: "false"
   start_hour_utc:
     description: "Hour to start the block (UTC, 0-23)"
     required: false
@@ -36,27 +40,35 @@ runs:
           echo "DEBUG: Weekend trigger activated"
         fi
 
-        # Extract labels and check specifically for the bypass string
-        RAW_LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
-        echo "DEBUG: Labels found: $RAW_LABELS"
-
-        # Check if the bypass label exists in the array
-        if echo "$RAW_LABELS" | jq -e ". | contains([\"${{ inputs.bypass_label }}\"])" > /dev/null; then
-          HAS_LABEL=true
+        if [ "${{ inputs.scheduled }}" = "true" ]; then
+          echo "DEBUG: Scheduled mode enabled"
+          if [ "$IS_SENSITIVE" = "true" ]; then
+            echo "scheduled-sensitive" > "$RUNNER_TEMP/deploy-guard-scheduled-sensitive"
+          fi
+          echo "Success: Scheduled mode check complete."
         else
-          HAS_LABEL=false
-        fi
+          # Extract labels and check specifically for the bypass string
+          RAW_LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
+          echo "DEBUG: Labels found: $RAW_LABELS"
 
-        echo "DEBUG: IS_SENSITIVE=$IS_SENSITIVE, HAS_LABEL=$HAS_LABEL"
+          # Check if the bypass label exists in the array
+          if echo "$RAW_LABELS" | jq -e ". | contains([\"${{ inputs.bypass_label }}\"])" > /dev/null; then
+            HAS_LABEL=true
+          else
+            HAS_LABEL=false
+          fi
 
-        if [ "$IS_SENSITIVE" = "true" ] && [ "$HAS_LABEL" = "false" ]; then
-          echo "::error title=Deployment Blocked::SENSITIVE WINDOW DETECTED. Apply the '${{ inputs.bypass_label }}' label to merge."
-          echo "blocked" > "$RUNNER_TEMP/deploy-guard-blocked"
-        elif [ "$IS_SENSITIVE" = "true" ] && [ "$HAS_LABEL" = "true" ]; then
-          echo "bypass" > "$RUNNER_TEMP/deploy-guard-bypass"
-          echo "Success: No restrictions active or bypass applied."
-        else
-          echo "Success: No restrictions active or bypass applied."
+          echo "DEBUG: IS_SENSITIVE=$IS_SENSITIVE, HAS_LABEL=$HAS_LABEL"
+
+          if [ "$IS_SENSITIVE" = "true" ] && [ "$HAS_LABEL" = "false" ]; then
+            echo "::error title=Deployment Blocked::SENSITIVE WINDOW DETECTED. Apply the '${{ inputs.bypass_label }}' label to merge."
+            echo "blocked" > "$RUNNER_TEMP/deploy-guard-blocked"
+          elif [ "$IS_SENSITIVE" = "true" ] && [ "$HAS_LABEL" = "true" ]; then
+            echo "bypass" > "$RUNNER_TEMP/deploy-guard-bypass"
+            echo "Success: No restrictions active or bypass applied."
+          else
+            echo "Success: No restrictions active or bypass applied."
+          fi
         fi
 
     - name: Comment on PR
@@ -65,10 +77,49 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
+        REEVALUATE_MESSAGE="[Autobot] Re-evaluate deployment time"
+
+        if [ "${{ inputs.scheduled }}" = "true" ]; then
+          if [ ! -f "$RUNNER_TEMP/deploy-guard-scheduled-sensitive" ]; then
+            echo "DEBUG: Scheduled run is outside sensitive window, no comments needed."
+            exit 0
+          fi
+
+          OPEN_PR_NUMBERS=$(gh pr list --repo "${{ github.repository }}" --state open --json number --jq '.[].number')
+          for PR_NUMBER in $OPEN_PR_NUMBERS; do
+            HAS_LABEL=false
+            HAS_REEVALUATE_REVIEW_COMMENT=false
+
+            PR_LABELS=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" --jq '.labels[].name')
+            if printf "%s\n" "$PR_LABELS" | jq -R -s 'split("\n")[:-1] | contains(["${{ inputs.bypass_label }}"])' | grep -q '^true$'; then
+              HAS_LABEL=true
+            fi
+
+            if [ "$HAS_LABEL" = "true" ]; then
+              echo "DEBUG: PR #$PR_NUMBER has bypass label, skipping."
+              continue
+            fi
+
+            if gh api --paginate "repos/${{ github.repository }}/pulls/${PR_NUMBER}/comments?per_page=100" \
+              --jq ".[] | select(.body == \"$REEVALUATE_MESSAGE\") | .id" \
+              | jq -e -n 'inputs | first' > /dev/null; then
+              HAS_REEVALUATE_REVIEW_COMMENT=true
+            fi
+
+            if [ "$HAS_REEVALUATE_REVIEW_COMMENT" = "true" ]; then
+              echo "DEBUG: PR #$PR_NUMBER already has re-evaluate review comment, skipping."
+              continue
+            fi
+
+            gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$REEVALUATE_MESSAGE"
+          done
+          exit 0
+        fi
+
         if [ -f "$RUNNER_TEMP/deploy-guard-blocked" ]; then
-          gh pr comment ${{ github.event.pull_request.number }} --body "**Deployment blocked** – Sensitive window detected. Apply the \`${{ inputs.bypass_label }}\` label to merge."
+          gh pr comment ${{ github.event.pull_request.number }} --body "**Deployment blocked** - Sensitive window detected. Apply the \`${{ inputs.bypass_label }}\` label to merge."
         elif [ -f "$RUNNER_TEMP/deploy-guard-bypass" ]; then
-          gh pr comment ${{ github.event.pull_request.number }} --body "**Bypass applied** – The \`${{ inputs.bypass_label }}\` label was found. Deployment is allowed during this window."
+          gh pr comment ${{ github.event.pull_request.number }} --body "**Bypass applied** - The \`${{ inputs.bypass_label }}\` label was found. Deployment is allowed during this window."
         fi
 
     - name: Fail if blocked

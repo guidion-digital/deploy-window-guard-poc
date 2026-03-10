@@ -1,0 +1,24 @@
+name: Scheduled Deploy Window Check Example
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  deploy-window-check-scheduled:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Deploy Window Check (Scheduled)
+        uses: guidion-digital/deploy-window-guard-poc/.github/actions/deploy-window-guard@master
+        with:
+          bypass_label: "bypass-deploy-window-guard"
+          scheduled: "true"
+          start_hour_utc: "17"
+          end_hour_utc: "8"
