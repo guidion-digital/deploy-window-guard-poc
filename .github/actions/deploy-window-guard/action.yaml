@@ -42,10 +42,8 @@ runs:
 
         if [ "${{ inputs.scheduled }}" = "true" ]; then
           echo "DEBUG: Scheduled mode enabled"
-          if [ "$IS_SENSITIVE" = "true" ]; then
-            echo "scheduled-sensitive" > "$RUNNER_TEMP/deploy-guard-scheduled-sensitive"
-          fi
-          echo "Success: Scheduled mode check complete."
+          echo "$IS_SENSITIVE" > "$RUNNER_TEMP/deploy-guard-is-sensitive"
+          echo "Success: Scheduled mode baseline check complete."
         else
           # Extract labels and check specifically for the bypass string
           RAW_LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
@@ -77,18 +75,13 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        REEVALUATE_MESSAGE="[Autobot] Re-evaluate deployment time"
-
         if [ "${{ inputs.scheduled }}" = "true" ]; then
-          if [ ! -f "$RUNNER_TEMP/deploy-guard-scheduled-sensitive" ]; then
-            echo "DEBUG: Scheduled run is outside sensitive window, no comments needed."
-            exit 0
-          fi
+          IS_SENSITIVE="$(cat "$RUNNER_TEMP/deploy-guard-is-sensitive" 2>/dev/null || echo "false")"
+          echo "DEBUG: Scheduled mode IS_SENSITIVE=$IS_SENSITIVE"
 
           OPEN_PR_NUMBERS=$(gh pr list --repo "${{ github.repository }}" --state open --json number --jq '.[].number')
           for PR_NUMBER in $OPEN_PR_NUMBERS; do
             HAS_LABEL=false
-            HAS_REEVALUATE_REVIEW_COMMENT=false
 
             PR_LABELS=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" --jq '.labels[].name')
             if printf "%s\n" "$PR_LABELS" | jq -R -s 'split("\n")[:-1] | contains(["${{ inputs.bypass_label }}"])' | grep -q '^true$'; then
@@ -100,18 +93,9 @@ runs:
               continue
             fi
 
-            if gh api --paginate "repos/${{ github.repository }}/pulls/${PR_NUMBER}/comments?per_page=100" \
-              --jq ".[] | select(.body == \"$REEVALUATE_MESSAGE\") | .id" \
-              | jq -e -n 'inputs | first' > /dev/null; then
-              HAS_REEVALUATE_REVIEW_COMMENT=true
+            if [ "$IS_SENSITIVE" = "true" ]; then
+              gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "[Autobot] Re-evaluate deployment time"
             fi
-
-            if [ "$HAS_REEVALUATE_REVIEW_COMMENT" = "true" ]; then
-              echo "DEBUG: PR #$PR_NUMBER already has re-evaluate review comment, skipping."
-              continue
-            fi
-
-            gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$REEVALUATE_MESSAGE"
           done
           exit 0
         fi
