@@ -2,7 +2,8 @@ name: Scheduled Deploy Window Check Example
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "0 8 * * *"
+    - cron: "0 17 * * *"
   workflow_dispatch:
 
 jobs:
@@ -21,5 +22,5 @@ jobs:
         with:
           bypass_label: "bypass-deploy-window-guard"
           scheduled: "true"
-          start_hour_utc: "8"
-          end_hour_utc: "17"
+          start_hour_utc: "17"
+          end_hour_utc: "8"
