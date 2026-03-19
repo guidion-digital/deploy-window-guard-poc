@@ -1,3 +1,4 @@
+
 # Rational
 
 Sometimes you accidentally deploy to production at 5:01 PM, break things, and go for dinner. Wouldn't it be great if you were warned before you did that (so you could do it with malice)?
